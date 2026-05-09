@@ -99,12 +99,21 @@ def main():
     matrix = get_matrix()
     session = get_session()
     prev_track = None
+    not_playing_since = None
+    dimmed = False
+    DIM_AFTER_SECONDS = 120  # dim after 2 minutes of nothing playing
+    DIM_BRIGHTNESS = 5       # very low brightness when dimmed
 
     while True:
         try:
             track = get_now_playing(username, session)
             if track:
                 track_id = f"{track['artist']}-{track['name']}"
+                # Restore brightness if it was dimmed
+                if dimmed:
+                    matrix.brightness = config_brightness()
+                    dimmed = False
+                not_playing_since = None
                 if track_id != prev_track:
                     print(f"Now playing: {track['name']} by {track['artist']}")
                     show_image(matrix, track['image_url'], session)
@@ -116,6 +125,19 @@ def main():
                     image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
                     matrix.SetImage(image.convert('RGB'))
                     prev_track = None
+                    not_playing_since = time.time()
+
+                # Dim after timeout
+                if not_playing_since and not dimmed:
+                    elapsed = time.time() - not_playing_since
+                    if elapsed >= DIM_AFTER_SECONDS:
+                        print('Dimming display...')
+                        matrix.brightness = DIM_BRIGHTNESS
+                        image = Image.open(DEFAULT_IMAGE)
+                        image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
+                        matrix.SetImage(image.convert('RGB'))
+                        dimmed = True
+
         except Exception as e:
             print(f'Error: {e}')
         time.sleep(5)

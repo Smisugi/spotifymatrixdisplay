@@ -1,5 +1,7 @@
 # Matrix Display
 
+<img width="4000" height="3000" alt="matrixdisplay" src="https://github.com/user-attachments/assets/d300ecee-5b15-49f3-ad7e-20171c16a028" />
+
 A Raspberry Pi Zero W RGB LED matrix display that shows the current Spotify track's album art via Last.fm scrobbling. No Spotify API setup required — just a free Last.fm account connected to Spotify. Includes a web control panel accessible from any device on the same network.
 
 ## Hardware

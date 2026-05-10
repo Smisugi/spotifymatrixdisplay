@@ -20,6 +20,11 @@ def load_settings():
     except:
         return None
 
+def config_brightness():
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    return int(config['DEFAULT']['brightness'])
+
 def get_matrix():
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
@@ -38,11 +43,13 @@ def get_session():
     session = requests.Session()
     retry = Retry(total=5, backoff_factor=2)
     adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
     session.mount('https://', adapter)
     return session
 
 def get_now_playing(username, session):
-    url = f'http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={username}&api_key=8ab94dddcc50331f32b1011ae1ee11da&format=json&limit=1'
+    api_key = "8ab94dddcc50331f32b1011ae1ee11da"
+    url = f'http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={username}&api_key={api_key}&format=json&limit=1'
     try:
         response = session.get(url, timeout=10)
         data = response.json()
@@ -101,33 +108,31 @@ def main():
     prev_track = None
     not_playing_since = None
     dimmed = False
-    DIM_AFTER_SECONDS = 120  # dim after 2 minutes of nothing playing
-    DIM_BRIGHTNESS = 5       # very low brightness when dimmed
+    DIM_AFTER_SECONDS = 120
+    DIM_BRIGHTNESS = 5
 
     while True:
         try:
             track = get_now_playing(username, session)
             if track:
-   		 track_id = f"{track['artist']}-{track['name']}"
-   		 # Restore brightness if it was dimmed
-   		 if dimmed:
-       			 matrix.brightness = config_brightness()
-       			 dimmed = False
-       			 prev_track = None  # Force image redraw after undimming
-		not_playing_since = None
-	    if track_id != prev_track:
-        	print(f"Now playing: {track['name']} by {track['artist']}")
-       		show_image(matrix, track['image_url'], session)
-		prev_track = track_id
+                track_id = f"{track['artist']}-{track['name']}"
+                if dimmed:
+                    matrix.brightness = config_brightness()
+                    dimmed = False
+                    prev_track = None
+                not_playing_since = None
+                if track_id != prev_track:
+                    print(f"Now playing: {track['name']} by {track['artist']}")
+                    show_image(matrix, track['image_url'], session)
+                    prev_track = track_id
             else:
                 if prev_track is not None:
                     print('Nothing playing')
                     image = Image.open(DEFAULT_IMAGE)
-                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)                    matrix.SetImage(image.convert('RGB'))
+                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
+                    matrix.SetImage(image.convert('RGB'))
                     prev_track = None
                     not_playing_since = time.time()
-
-                # Dim after timeout
                 if not_playing_since and not dimmed:
                     elapsed = time.time() - not_playing_since
                     if elapsed >= DIM_AFTER_SECONDS:
@@ -137,7 +142,6 @@ def main():
                         image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
                         matrix.SetImage(image.convert('RGB'))
                         dimmed = True
-
         except Exception as e:
             print(f'Error: {e}')
         time.sleep(5)

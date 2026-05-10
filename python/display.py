@@ -58,7 +58,7 @@ def get_session():
 def get_now_playing(username, session):
     api_key = "8ab94dddcc50331f32b1011ae1ee11da"
     url = f'http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={username}&api_key={api_key}&format=json&limit=1'
-     try:
+    try:
         response = session.get(url, timeout=10)
         data = response.json()
         tracks = data['recenttracks']['track']

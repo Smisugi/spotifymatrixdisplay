@@ -64,11 +64,9 @@ def get_now_playing(username, session):
         tracks = data['recenttracks']['track']
         if not tracks:
             return None
-        # getrecenttracks returns a list or single dict
         if isinstance(tracks, dict):
             tracks = [tracks]
         track = tracks[0]
-        # Only return if track is currently playing
         if '@attr' not in track or track['@attr'].get('nowplaying') != 'true':
             return None
         artist = track['artist']['#text']
@@ -98,6 +96,11 @@ def show_image(matrix, image_url, session):
         image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
         matrix.SetImage(image.convert('RGB'))
 
+def show_default(matrix):
+    image = Image.open(DEFAULT_IMAGE)
+    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
+    matrix.SetImage(image.convert('RGB'))
+
 def write_status(track, artist, dimmed, brightness):
     try:
         with open(STATUS_PATH, 'w') as f:
@@ -125,9 +128,7 @@ def main():
     if not settings or 'lastfm_username' not in settings:
         print('No settings found, waiting...')
         matrix = get_matrix()
-        image = Image.open(DEFAULT_IMAGE)
-        image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
-        matrix.SetImage(image.convert('RGB'))
+        show_default(matrix)
         while True:
             settings = load_settings()
             if settings and 'lastfm_username' in settings:
@@ -156,31 +157,34 @@ def main():
                 if command == 'dim':
                     matrix.brightness = DIM_BRIGHTNESS
                     dimmed = True
-                    image = Image.open(DEFAULT_IMAGE)
-                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
-                    matrix.SetImage(image.convert('RGB'))
+                    show_default(matrix)
 
                 elif command == 'undim':
                     matrix.brightness = current_brightness
                     dimmed = False
-                    prev_track = None  # Force redraw
+                    prev_track = None
 
                 elif command == 'brightness':
                     current_brightness = cmd.get('value', 70)
                     if not dimmed:
                         matrix.brightness = current_brightness
+                        if prev_track is not None:
+                            track = get_now_playing(username, session)
+                            if track:
+                                show_image(matrix, track['image_url'], session)
+                            else:
+                                show_default(matrix)
+                        else:
+                            show_default(matrix)
 
                 elif command == 'refresh':
-                    prev_track = None  # Force redraw
+                    prev_track = None
 
                 elif command == 'set_username':
                     username = cmd.get('username', username)
                     settings['lastfm_username'] = username
                     save_settings(settings)
                     prev_track = None
-
-                elif command == 'shutdown':
-                    subprocess.run(['sudo', 'shutdown', '-h', 'now'])
 
             # Get now playing
             track = get_now_playing(username, session)
@@ -199,9 +203,7 @@ def main():
             else:
                 if prev_track is not None:
                     print('Nothing playing')
-                    image = Image.open(DEFAULT_IMAGE)
-                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
-                    matrix.SetImage(image.convert('RGB'))
+                    show_default(matrix)
                     prev_track = None
                     not_playing_since = time.time()
                 if not_playing_since and not dimmed:
@@ -209,9 +211,7 @@ def main():
                     if elapsed >= DIM_AFTER_SECONDS:
                         print('Dimming display...')
                         matrix.brightness = DIM_BRIGHTNESS
-                        image = Image.open(DEFAULT_IMAGE)
-                        image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
-                        matrix.SetImage(image.convert('RGB'))
+                        show_default(matrix)
                         dimmed = True
                 write_status(None, None, dimmed, current_brightness)
 

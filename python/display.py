@@ -8,10 +8,13 @@ from rgbmatrix import RGBMatrix, RGBMatrixOptions
 import configparser
 import os
 import json
+import subprocess
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '../config/options.ini')
 SETTINGS_PATH = os.path.join(os.path.dirname(__file__), '../config/settings.json')
 DEFAULT_IMAGE = os.path.join(os.path.dirname(__file__), '../images/default.png')
+COMMAND_PATH = '/tmp/matrix_command.json'
+STATUS_PATH = '/tmp/matrix_status.json'
 
 def load_settings():
     try:
@@ -19,6 +22,10 @@ def load_settings():
             return json.load(f)
     except:
         return None
+
+def save_settings(settings):
+    with open(SETTINGS_PATH, 'w') as f:
+        json.dump(settings, f)
 
 def config_brightness():
     config = configparser.ConfigParser()
@@ -48,7 +55,7 @@ def get_session():
     return session
 
 def get_now_playing(username, session):
-    api_key = "8ab94dddcc50331f32b1011ae1ee11da"
+    api_key = "YOUR_LASTFM_API_KEY"
     url = f'http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={username}&api_key={api_key}&format=json&limit=1'
     try:
         response = session.get(url, timeout=10)
@@ -86,6 +93,27 @@ def show_image(matrix, image_url, session):
         image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
         matrix.SetImage(image.convert('RGB'))
 
+def write_status(track, artist, dimmed, brightness):
+    try:
+        with open(STATUS_PATH, 'w') as f:
+            json.dump({
+                'track': track,
+                'artist': artist,
+                'dimmed': dimmed,
+                'brightness': brightness
+            }, f)
+    except:
+        pass
+
+def read_command():
+    try:
+        with open(COMMAND_PATH, 'r') as f:
+            cmd = json.load(f)
+        os.remove(COMMAND_PATH)
+        return cmd
+    except:
+        return None
+
 def main():
     print('Starting matrix display...')
     settings = load_settings()
@@ -108,16 +136,53 @@ def main():
     prev_track = None
     not_playing_since = None
     dimmed = False
+    current_brightness = config_brightness()
     DIM_AFTER_SECONDS = 120
     DIM_BRIGHTNESS = 5
 
     while True:
         try:
+            # Check for commands from control panel
+            cmd = read_command()
+            if cmd:
+                command = cmd.get('command')
+                print(f'Received command: {command}')
+
+                if command == 'dim':
+                    matrix.brightness = DIM_BRIGHTNESS
+                    dimmed = True
+                    image = Image.open(DEFAULT_IMAGE)
+                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
+                    matrix.SetImage(image.convert('RGB'))
+
+                elif command == 'undim':
+                    matrix.brightness = current_brightness
+                    dimmed = False
+                    prev_track = None  # Force redraw
+
+                elif command == 'brightness':
+                    current_brightness = cmd.get('value', 70)
+                    if not dimmed:
+                        matrix.brightness = current_brightness
+
+                elif command == 'refresh':
+                    prev_track = None  # Force redraw
+
+                elif command == 'set_username':
+                    username = cmd.get('username', username)
+                    settings['lastfm_username'] = username
+                    save_settings(settings)
+                    prev_track = None
+
+                elif command == 'shutdown':
+                    subprocess.run(['sudo', 'shutdown', '-h', 'now'])
+
+            # Get now playing
             track = get_now_playing(username, session)
             if track:
                 track_id = f"{track['artist']}-{track['name']}"
                 if dimmed:
-                    matrix.brightness = config_brightness()
+                    matrix.brightness = current_brightness
                     dimmed = False
                     prev_track = None
                 not_playing_since = None
@@ -125,6 +190,7 @@ def main():
                     print(f"Now playing: {track['name']} by {track['artist']}")
                     show_image(matrix, track['image_url'], session)
                     prev_track = track_id
+                write_status(track['name'], track['artist'], dimmed, current_brightness)
             else:
                 if prev_track is not None:
                     print('Nothing playing')
@@ -142,6 +208,8 @@ def main():
                         image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
                         matrix.SetImage(image.convert('RGB'))
                         dimmed = True
+                write_status(None, None, dimmed, current_brightness)
+
         except Exception as e:
             print(f'Error: {e}')
         time.sleep(5)

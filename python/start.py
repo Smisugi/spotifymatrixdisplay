@@ -72,6 +72,10 @@ address=/#/192.168.4.1
               os.path.join(os.path.dirname(__file__), 'portal.py')])
 
 def start_display():
+    print('Starting control panel...')
+    subprocess.Popen(['sudo', 'python3',
+                     os.path.join(os.path.dirname(__file__), 'control.py')])
+    time.sleep(2)
     print('Starting display...')
     os.execv('/usr/bin/python3', ['python3',
               os.path.join(os.path.dirname(__file__), 'display.py')])
@@ -79,11 +83,7 @@ def start_display():
 if __name__ == '__main__':
     time.sleep(10)
     if not has_settings():
-        # No settings at all - go to hotspot for first time setup
         start_hotspot()
     else:
-        # Settings exist - wait for internet then start display
-        # Even if internet never comes, start display anyway
-        # display.py handles retries gracefully
         wait_for_connection(timeout=60)
         start_display()

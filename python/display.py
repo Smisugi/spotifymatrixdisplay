@@ -108,22 +108,22 @@ def main():
         try:
             track = get_now_playing(username, session)
             if track:
-                track_id = f"{track['artist']}-{track['name']}"
-                # Restore brightness if it was dimmed
-                if dimmed:
-                    matrix.brightness = config_brightness()
-                    dimmed = False
-                not_playing_since = None
-                if track_id != prev_track:
-                    print(f"Now playing: {track['name']} by {track['artist']}")
-                    show_image(matrix, track['image_url'], session)
-                    prev_track = track_id
+   		 track_id = f"{track['artist']}-{track['name']}"
+   		 # Restore brightness if it was dimmed
+   		 if dimmed:
+       			 matrix.brightness = config_brightness()
+       			 dimmed = False
+       			 prev_track = None  # Force image redraw after undimming
+		not_playing_since = None
+	    if track_id != prev_track:
+        	print(f"Now playing: {track['name']} by {track['artist']}")
+       		show_image(matrix, track['image_url'], session)
+		prev_track = track_id
             else:
                 if prev_track is not None:
                     print('Nothing playing')
                     image = Image.open(DEFAULT_IMAGE)
-                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)
-                    matrix.SetImage(image.convert('RGB'))
+                    image = image.resize((matrix.width, matrix.height), Image.Resampling.LANCZOS)                    matrix.SetImage(image.convert('RGB'))
                     prev_track = None
                     not_playing_since = time.time()
 

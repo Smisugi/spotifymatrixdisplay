@@ -77,8 +77,11 @@ def start_display():
                      os.path.join(os.path.dirname(__file__), 'control.py')])
     time.sleep(2)
     print('Starting display...')
-    os.execv('/usr/bin/python3', ['python3',
-              os.path.join(os.path.dirname(__file__), 'display.py')])
+    subprocess.Popen(['sudo', 'python3',
+                     os.path.join(os.path.dirname(__file__), 'display.py')])
+    # Keep start.py alive so the service doesn't exit
+    while True:
+        time.sleep(60)
 
 if __name__ == '__main__':
     time.sleep(10)

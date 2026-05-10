@@ -44,6 +44,7 @@ def get_matrix():
     options.gpio_slowdown = int(config['DEFAULT']['gpio_slowdown'])
     options.brightness = int(config['DEFAULT']['brightness'])
     options.limit_refresh_rate_hz = int(config['DEFAULT']['refresh_rate'])
+    options.drop_privileges = False
     return RGBMatrix(options=options)
 
 def get_session():
@@ -55,22 +56,26 @@ def get_session():
     return session
 
 def get_now_playing(username, session):
-    api_key = "YOUR_LASTFM_API_KEY"
+    api_key = "8ab94dddcc50331f32b1011ae1ee11da"
     url = f'http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user={username}&api_key={api_key}&format=json&limit=1'
-    try:
+     try:
         response = session.get(url, timeout=10)
         data = response.json()
         tracks = data['recenttracks']['track']
         if not tracks:
             return None
+        # getrecenttracks returns a list or single dict
+        if isinstance(tracks, dict):
+            tracks = [tracks]
         track = tracks[0]
-        if '@attr' not in track or 'nowplaying' not in track['@attr']:
+        # Only return if track is currently playing
+        if '@attr' not in track or track['@attr'].get('nowplaying') != 'true':
             return None
         artist = track['artist']['#text']
         name = track['name']
         image_url = None
         for img in track['image']:
-            if img['size'] == 'large':
+            if img['size'] == 'large' and img['#text']:
                 image_url = img['#text']
                 break
         return {'artist': artist, 'name': name, 'image_url': image_url}

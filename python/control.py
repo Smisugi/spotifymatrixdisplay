@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template_string
 import json
 import os
+import subprocess
 
 app = Flask(__name__)
 
@@ -26,17 +27,20 @@ HTML = '''
         .not-playing { color: #555; font-size: 14px; text-align: center; padding: 10px 0; }
         .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-bottom: 8px; font-weight: bold; transition: opacity 0.2s; }
         .btn:active { opacity: 0.7; }
+        .btn:last-child { margin-bottom: 0; }
         .btn-green { background: #1db954; color: white; }
         .btn-gray { background: #333; color: white; }
         .btn-red { background: #e74c3c; color: white; }
-        .btn-yellow { background: #f39c12; color: white; }
-        .btn-row { display: flex; gap: 8px; }
+        .btn-yellow { background: #f39c12; color: black; }
+        .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
         .btn-row .btn { margin-bottom: 0; }
-        .slider-row { display: flex; align-items: center; gap: 10px; }
+        .slider-container { margin-bottom: 10px; }
+        .slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .slider-row input { flex: 1; accent-color: #1db954; }
         .slider-row span { color: #1db954; font-weight: bold; min-width: 35px; text-align: right; }
+        input[type="text"] { width: 100%; padding: 10px; border-radius: 8px; border: none; margin-bottom: 8px; font-size: 15px; background: #333; color: #fff; }
         .status { text-align: center; font-size: 12px; color: #555; margin-top: 15px; }
-        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1db954; color: white; padding: 10px 20px; border-radius: 20px; font-size: 14px; display: none; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1db954; color: white; padding: 10px 20px; border-radius: 20px; font-size: 14px; display: none; z-index: 999; }
     </style>
 </head>
 <body>
@@ -50,34 +54,34 @@ HTML = '''
 
     <div class="card">
         <h2>Display</h2>
-        <div class="btn-row" style="margin-bottom: 8px;">
-            <button class="btn btn-green" onclick="sendCommand('undim')">💡 Full Brightness</button>
-            <button class="btn btn-gray" onclick="sendCommand('dim')">🌙 Dim</button>
-        </div>
         <button class="btn btn-gray" onclick="sendCommand('refresh')">🔄 Refresh Now Playing</button>
     </div>
 
     <div class="card">
         <h2>Brightness</h2>
-        <div class="slider-row">
-            <span>0</span>
-            <input type="range" min="1" max="100" value="70" id="brightness-slider" oninput="updateBrightness(this.value)">
-            <span id="brightness-value">70</span>
+        <div class="slider-container">
+            <div class="slider-row">
+                <span>1</span>
+                <input type="range" min="1" max="100" value="70" id="brightness-slider" oninput="document.getElementById('brightness-value').textContent = this.value">
+                <span id="brightness-value">70</span>
+            </div>
+            <button class="btn btn-green" onclick="applyBrightness()">💡 Set Brightness</button>
         </div>
     </div>
 
     <div class="card">
-        <h2>Settings</h2>
-        <input type="text" id="lastfm-username" placeholder="Last.fm Username" style="width:100%; padding:10px; border-radius:8px; border:none; margin-bottom:8px; font-size:15px;">
+        <h2>Last.fm Username</h2>
+        <input type="text" id="lastfm-username" placeholder="Enter Last.fm username">
         <button class="btn btn-green" onclick="saveUsername()">💾 Save Username</button>
     </div>
 
     <div class="card">
-        <h2>Power</h2>
+        <h2>System</h2>
+        <button class="btn btn-yellow" onclick="confirmRestart()" style="margin-bottom:8px;">🔁 Restart Display</button>
         <button class="btn btn-red" onclick="confirmShutdown()">⏻ Safe Shutdown</button>
     </div>
 
-    <div class="status" id="status">Connected</div>
+    <div class="status" id="status">Connecting...</div>
     <div class="toast" id="toast"></div>
 
     <script>
@@ -85,7 +89,7 @@ HTML = '''
             const t = document.getElementById('toast');
             t.textContent = msg;
             t.style.display = 'block';
-            setTimeout(() => t.style.display = 'none', 2000);
+            setTimeout(() => t.style.display = 'none', 2500);
         }
 
         function sendCommand(cmd, data={}) {
@@ -99,15 +103,22 @@ HTML = '''
             .catch(() => showToast('Error sending command'));
         }
 
-        function updateBrightness(val) {
-            document.getElementById('brightness-value').textContent = val;
-            sendCommand('brightness', {value: parseInt(val)});
+        function applyBrightness() {
+            const val = parseInt(document.getElementById('brightness-slider').value);
+            sendCommand('brightness', {value: val});
         }
 
         function saveUsername() {
             const username = document.getElementById('lastfm-username').value.trim();
             if (!username) return showToast('Enter a username first');
             sendCommand('set_username', {username: username});
+        }
+
+        function confirmRestart() {
+            if (confirm('Restart the display service?')) {
+                sendCommand('restart');
+                showToast('Restarting...');
+            }
         }
 
         function confirmShutdown() {
@@ -138,7 +149,6 @@ HTML = '''
             });
         }
 
-        // Update status every 5 seconds
         updateStatus();
         setInterval(updateStatus, 5000);
     </script>
@@ -154,16 +164,27 @@ def index():
 def command():
     data = request.get_json()
     cmd = data.get('command')
+    print(f'Command received: {cmd}')
 
-    with open(COMMAND_PATH, 'w') as f:
-        json.dump(data, f)
+    if cmd == 'restart':
+        subprocess.Popen(['sudo', 'systemctl', 'restart', 'matrixdisplay'])
+        return jsonify({'status': 'ok', 'message': 'Restarting display...'})
+
+    if cmd == 'shutdown':
+        subprocess.Popen(['sudo', 'shutdown', '-h', 'now'])
+        return jsonify({'status': 'ok', 'message': 'Shutting down...'})
+
+    try:
+        with open(COMMAND_PATH, 'w') as f:
+            json.dump(data, f)
+        print(f'Command written to {COMMAND_PATH}')
+    except Exception as e:
+        print(f'Error writing command: {e}')
+        return jsonify({'status': 'error', 'message': str(e)})
 
     messages = {
-        'dim': 'Display dimmed',
-        'undim': 'Brightness restored',
         'refresh': 'Refreshing now playing',
         'brightness': f"Brightness set to {data.get('value')}",
-        'shutdown': 'Shutting down safely...',
         'set_username': f"Username updated to {data.get('username')}"
     }
 
